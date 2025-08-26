@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "postgresql" # Target database engine
+    queries: "./db/query/" # Directory containing SQL queries
+    schema: "./db/schema/schema.sql" # Directory containing database schema
+    gen:
+      go:
+        package: "db" # Go package name for generated code (not path value, but the package name)
+        out: "./db/sqlc/" # Output directory for generated Go files
+        sql_package: "database/sql" # PostgreSQL driver for generated code
+        emit_json_tags: true # Enable JSON tags on generated structs for API compatibility
+        emit_prepared_queries: false # Use prepared queries for better performance and security if true (default as false)
+        emit_interface: false # If true, generates a Querier interface for the generated methods.
+        emit_empty_slices: true # Generate an empty slice instead of nil
