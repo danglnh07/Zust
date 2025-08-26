@@ -4,8 +4,8 @@ CREATE TYPE account_status AS ENUM ('inactive', 'active', 'ban', 'locked');
 -- Create table account
 CREATE TABLE IF NOT EXISTS account (
     account_id UUID PRIMARY KEY DEFAULT gen_random_UUID(),
-    email VARCHAR(40) NOT NULL,
-    username VARCHAR(20) NOT NULL,
+    email VARCHAR(40) NOT NULL UNIQUE,
+    username VARCHAR(20) NOT NULL UNIQUE,
     password VARCHAR(60), -- BCrypt hashing generates 60 characters
     avatar VARCHAR(50) NOT NULL DEFAULT 'avatar.png',
     cover VARCHAR(50) NOT NULL DEFAULT 'cover_image.png',
