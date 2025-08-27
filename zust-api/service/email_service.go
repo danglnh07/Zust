@@ -35,7 +35,7 @@ type VerificationEmailData struct {
 
 func (service *EmailService) PrepareEmail(data VerificationEmailData) (string, error) {
 	// Create buffer
-	tmpl, err := template.ParseFiles("../template/verification.html")
+	tmpl, err := template.ParseFiles("template/verification.html")
 	if err != nil {
 		return "", err
 	}
