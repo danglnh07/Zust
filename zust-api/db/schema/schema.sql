@@ -1,5 +1,5 @@
 -- Create enum
-CREATE TYPE account_status AS ENUM ('inactive', 'active', 'ban', 'locked');
+CREATE TYPE account_status AS ENUM ('inactive', 'active', 'banned', 'locked');
 
 -- Create table account
 CREATE TABLE IF NOT EXISTS account (

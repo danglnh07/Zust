@@ -17,7 +17,7 @@ type AccountStatus string
 const (
 	AccountStatusInactive AccountStatus = "inactive"
 	AccountStatusActive   AccountStatus = "active"
-	AccountStatusBan      AccountStatus = "ban"
+	AccountStatusBanned   AccountStatus = "banned"
 	AccountStatusLocked   AccountStatus = "locked"
 )
 
