@@ -10,21 +10,24 @@ import (
 )
 
 type EmailService struct {
-	Host     string
-	Port     string
-	Email    string
-	Password string
+	Host  string
+	Port  string
+	Email string
+	Auth  smtp.Auth
 }
 
 func NewEmailService() *EmailService {
 	// Load email configuration from environment variables
 	config := util.GetConfig()
 
+	// Try simple authentication
+	smtpAuth := smtp.PlainAuth("", config.Email, config.AppPassword, config.SMTPHost)
+
 	return &EmailService{
-		Host:     config.SMTPHost,
-		Port:     config.SMTPPort,
-		Email:    config.Email,
-		Password: config.AppPassword,
+		Host:  config.SMTPHost,
+		Port:  config.SMTPPort,
+		Email: config.Email,
+		Auth:  smtpAuth,
 	}
 }
 
@@ -50,8 +53,6 @@ func (service *EmailService) PrepareEmail(data VerificationEmailData) (string, e
 }
 
 func (service *EmailService) SendEmail(to, subject, body string) error {
-	smtpAuth := smtp.PlainAuth("", service.Email, service.Password, service.Host)
-
 	// Set email headers with MIME version and content type
 	headers := make(map[string]string)
 	headers["From"] = service.Email
@@ -71,7 +72,7 @@ func (service *EmailService) SendEmail(to, subject, body string) error {
 	addr := fmt.Sprintf("%s:%s", service.Host, service.Port)
 	return smtp.SendMail(
 		addr,
-		smtpAuth,
+		service.Auth,
 		service.Email,
 		[]string{to},
 		[]byte(message.String()),
