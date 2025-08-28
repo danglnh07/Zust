@@ -48,9 +48,9 @@ func (server *Server) RegisterHandler() {
 	server.mux.HandleFunc("POST /auth/register", server.HandleRegister)
 	server.mux.HandleFunc("POST /auth/verification/resend", server.HandleResendVerification)
 	server.mux.HandleFunc("GET /auth/verification", server.HandleVerify)
-	server.mux.Handle("POST /auth/logout", server.AuthMiddleware(http.HandlerFunc(server.HandleLogout)))
-
 	server.mux.HandleFunc("GET /oauth2/callback", server.HandleCallback)
+	server.mux.Handle("POST /auth/token/refresh", server.AuthMiddleware(http.HandlerFunc(server.HandleRefreshToken)))
+	server.mux.Handle("POST /auth/logout", server.AuthMiddleware(http.HandlerFunc(server.HandleLogout)))
 }
 
 // Start runs the HTTP server on a specific address

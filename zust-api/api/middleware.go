@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -41,12 +42,21 @@ func (server *Server) AuthMiddleware(next http.Handler) http.Handler {
 				return
 			}
 
-			server.WriteError(w, http.StatusBadRequest, "Invalid access token")
+			server.WriteError(w, http.StatusBadRequest, fmt.Sprintf("Invalid access token: %s", err.Error()))
 			return
 		}
 
-		// Extract the claims and put them in the request context
-		r = r.WithContext(context.WithValue(r.Context(), key, claims))
-		next.ServeHTTP(w, r)
+		// Check token type
+		path := r.URL.Path
+		if claims.TokenType == "refresh-token" && path == "/auth/token/refresh" ||
+			claims.TokenType == "access-token" && path != "/auth/token/refresh" {
+			// Extract the claims and put them in the request context
+			r = r.WithContext(context.WithValue(r.Context(), key, claims))
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		server.WriteError(w, http.StatusBadRequest, "Invalid access token: unsuitable token type for this request")
+
 	})
 }

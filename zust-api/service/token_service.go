@@ -127,26 +127,3 @@ func (service *JWTService) VerifyToken(signedToken string, query *db.Queries) (*
 
 	return claims, nil
 }
-
-// Method to refresh the access token. It receive the refresh token (string) and return a new access token (string)
-// or error
-func (service *JWTService) RefreshToken(refreshToken string, query *db.Queries) (string, error) {
-	// First, check if the refresh token is valid and not expire
-	claims, err := service.VerifyToken(refreshToken, query)
-	if err != nil {
-		return "", err
-	}
-
-	// Check if this really the refresh token
-	if claims.TokenType != "refresh-token" {
-		return "", fmt.Errorf("invalid token type")
-	}
-
-	// Create new refresh token
-	newToken, err := service.CreateToken(claims.ID, "access-token",
-		claims.Version, service.TokenExpirationTime)
-	if err != nil {
-		return "", err
-	}
-	return newToken, nil
-}
