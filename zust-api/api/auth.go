@@ -467,7 +467,7 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 	 */
 
 	// Try downloading the avatar image to local storage
-	newname := fmt.Sprintf("avatar_%s", util.RandomString(10))
+	newname := fmt.Sprintf("avatar_%s.png", util.RandomString(10))
 	if err = server.storage.DownloadURL(userData.Avatar, newname); err != nil {
 		server.logger.Warn("GET oauth2/callback: failed to download avatar image", "error", err)
 		newname = "avatar.png" // Use default avatar image
