@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS account (
     email VARCHAR(40) NOT NULL UNIQUE,
     username VARCHAR(20) NOT NULL UNIQUE,
     password VARCHAR(60), -- BCrypt hashing generates 60 characters
-    avatar VARCHAR(50) NOT NULL DEFAULT 'avatar.png',
-    cover VARCHAR(50) NOT NULL DEFAULT 'cover_image.png',
     description VARCHAR(100),
     status account_status NOT NULL DEFAULT account_status('inactive'),
     -- OAuth2-specific fields

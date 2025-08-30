@@ -43,6 +43,9 @@ func NewServer(conn *sql.DB, logger *slog.Logger) *Server {
 
 // RegisterHandler register all route
 func (server *Server) RegisterHandler() {
+	// Media serving
+	server.mux.HandleFunc("GET /media/{id}", server.HandleFile)
+
 	// Auth routes
 	server.mux.HandleFunc("POST /auth/login", server.HandleLogin)
 	server.mux.HandleFunc("POST /auth/register", server.HandleRegister)

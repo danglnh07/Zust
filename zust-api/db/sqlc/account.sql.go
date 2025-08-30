@@ -24,15 +24,14 @@ func (q *Queries) ActivateAccount(ctx context.Context, accountID uuid.UUID) erro
 }
 
 const createAccountWithOAuth = `-- name: CreateAccountWithOAuth :one
-INSERT INTO account (email, username, avatar, status, oauth_provider, oauth_provider_id)
-VALUES ($1, $2, $3, 'active', $4, $5)
-RETURNING account_id, email, username, password, avatar, cover, description, status, oauth_provider, oauth_provider_id, token_version
+INSERT INTO account (email, username, status, oauth_provider, oauth_provider_id)
+VALUES ($1, $2, 'active', $3, $4)
+RETURNING account_id, email, username, password, description, status, oauth_provider, oauth_provider_id, token_version
 `
 
 type CreateAccountWithOAuthParams struct {
 	Email           string         `json:"email"`
 	Username        string         `json:"username"`
-	Avatar          string         `json:"avatar"`
 	OauthProvider   sql.NullString `json:"oauth_provider"`
 	OauthProviderID sql.NullString `json:"oauth_provider_id"`
 }
@@ -41,7 +40,6 @@ func (q *Queries) CreateAccountWithOAuth(ctx context.Context, arg CreateAccountW
 	row := q.db.QueryRowContext(ctx, createAccountWithOAuth,
 		arg.Email,
 		arg.Username,
-		arg.Avatar,
 		arg.OauthProvider,
 		arg.OauthProviderID,
 	)
@@ -51,8 +49,6 @@ func (q *Queries) CreateAccountWithOAuth(ctx context.Context, arg CreateAccountW
 		&i.Email,
 		&i.Username,
 		&i.Password,
-		&i.Avatar,
-		&i.Cover,
 		&i.Description,
 		&i.Status,
 		&i.OauthProvider,
@@ -65,7 +61,7 @@ func (q *Queries) CreateAccountWithOAuth(ctx context.Context, arg CreateAccountW
 const createAccountWithPassword = `-- name: CreateAccountWithPassword :one
 INSERT INTO account (email, username, password)
 VALUES ($1, $2, $3)
-RETURNING account_id, email, username, password, avatar, cover, description, status, oauth_provider, oauth_provider_id, token_version
+RETURNING account_id, email, username, password, description, status, oauth_provider, oauth_provider_id, token_version
 `
 
 type CreateAccountWithPasswordParams struct {
@@ -82,8 +78,6 @@ func (q *Queries) CreateAccountWithPassword(ctx context.Context, arg CreateAccou
 		&i.Email,
 		&i.Username,
 		&i.Password,
-		&i.Avatar,
-		&i.Cover,
 		&i.Description,
 		&i.Status,
 		&i.OauthProvider,
@@ -94,7 +88,7 @@ func (q *Queries) CreateAccountWithPassword(ctx context.Context, arg CreateAccou
 }
 
 const getAccountByEmail = `-- name: GetAccountByEmail :one
-SELECT account_id, email, username, password, avatar, cover, description, status, token_version FROM account
+SELECT account_id, email, username, password, description, status, token_version FROM account
 WHERE email = $1
 `
 
@@ -103,8 +97,6 @@ type GetAccountByEmailRow struct {
 	Email        string         `json:"email"`
 	Username     string         `json:"username"`
 	Password     sql.NullString `json:"password"`
-	Avatar       string         `json:"avatar"`
-	Cover        string         `json:"cover"`
 	Description  sql.NullString `json:"description"`
 	Status       AccountStatus  `json:"status"`
 	TokenVersion int32          `json:"token_version"`
@@ -118,8 +110,6 @@ func (q *Queries) GetAccountByEmail(ctx context.Context, email string) (GetAccou
 		&i.Email,
 		&i.Username,
 		&i.Password,
-		&i.Avatar,
-		&i.Cover,
 		&i.Description,
 		&i.Status,
 		&i.TokenVersion,
@@ -128,7 +118,7 @@ func (q *Queries) GetAccountByEmail(ctx context.Context, email string) (GetAccou
 }
 
 const getAccountByUsername = `-- name: GetAccountByUsername :one
-SELECT account_id, email, username, password, avatar, cover, description, status, token_version FROM account
+SELECT account_id, email, username, password, description, status, token_version FROM account
 WHERE username = $1
 `
 
@@ -137,8 +127,6 @@ type GetAccountByUsernameRow struct {
 	Email        string         `json:"email"`
 	Username     string         `json:"username"`
 	Password     sql.NullString `json:"password"`
-	Avatar       string         `json:"avatar"`
-	Cover        string         `json:"cover"`
 	Description  sql.NullString `json:"description"`
 	Status       AccountStatus  `json:"status"`
 	TokenVersion int32          `json:"token_version"`
@@ -152,8 +140,6 @@ func (q *Queries) GetAccountByUsername(ctx context.Context, username string) (Ge
 		&i.Email,
 		&i.Username,
 		&i.Password,
-		&i.Avatar,
-		&i.Cover,
 		&i.Description,
 		&i.Status,
 		&i.TokenVersion,
@@ -203,7 +189,7 @@ func (q *Queries) IsAccountRegistered(ctx context.Context, arg IsAccountRegister
 }
 
 const loginWithOAuth = `-- name: LoginWithOAuth :one
-SELECT account_id, email, username, avatar, cover, description, status, token_version FROM account
+SELECT account_id, email, username, description, status, token_version FROM account
 WHERE oauth_provider = $1 AND oauth_provider_id = $2
 `
 
@@ -216,8 +202,6 @@ type LoginWithOAuthRow struct {
 	AccountID    uuid.UUID      `json:"account_id"`
 	Email        string         `json:"email"`
 	Username     string         `json:"username"`
-	Avatar       string         `json:"avatar"`
-	Cover        string         `json:"cover"`
 	Description  sql.NullString `json:"description"`
 	Status       AccountStatus  `json:"status"`
 	TokenVersion int32          `json:"token_version"`
@@ -230,8 +214,6 @@ func (q *Queries) LoginWithOAuth(ctx context.Context, arg LoginWithOAuthParams) 
 		&i.AccountID,
 		&i.Email,
 		&i.Username,
-		&i.Avatar,
-		&i.Cover,
 		&i.Description,
 		&i.Status,
 		&i.TokenVersion,

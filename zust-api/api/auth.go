@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -111,7 +112,7 @@ func (server *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       account.Avatar,
+		Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
@@ -178,6 +179,14 @@ func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 		// Other database error
 		server.logger.Error("POST /register: failed to create account", "error", err)
 		server.WriteError(w, http.StatusInternalServerError, "Failed to create account")
+		return
+	}
+
+	// Create user repository with default avatar and cover
+	err = server.storage.CreateUserRepo(account.AccountID.String())
+	if err != nil {
+		server.logger.Error("POST /auth/register: failed to create user repository", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -451,7 +460,7 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 			ID:           account.AccountID.String(),
 			Email:        account.Email,
 			Username:     account.Username,
-			Avatar:       account.Avatar,
+			Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 		}
@@ -460,24 +469,22 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 	}
 
 	/*
-	 * If account is not registered:
-	 * 1. Try downloading the avatar image to local storage
-	 * 2. Create a new account with the user data from OAuth provider, avatar is the local path if download success,
-	 * else, we are using the default avatar image (avatar.png)
+	 * If the account is not registered:
+	 * 1. Create a new account with the user data from OAuth provider
+	 * 2. Create JWT tokens (access token and refresh token)
+	 * 3. Return user info and tokens
+	 * Note: as for the avatar:
+	 * 1. We will run the downloading as a background task, so the user can use the app immediately
+	 * 2. Downloading will have retry mechanism, if failed after 3 times, we will just use the default avatar
+	 * 3. Since the avatar is located under the a folder named with the user ID, so there will be no conflict even if we
+	 * user avatar.png as the value (hence the database don't need to store the full path to the avatar image). Same logic
+	 * apply to the cover image
 	 */
-
-	// Try downloading the avatar image to local storage
-	newname := fmt.Sprintf("avatar_%s.png", util.RandomString(10))
-	if err = server.storage.DownloadURL(userData.Avatar, newname); err != nil {
-		server.logger.Warn("GET oauth2/callback: failed to download avatar image", "error", err)
-		newname = "avatar.png" // Use default avatar image
-	}
 
 	// If account is not registered, create a new account
 	account, err := server.query.CreateAccountWithOAuth(r.Context(), db.CreateAccountWithOAuthParams{
 		Email:           userData.Email,
 		Username:        userData.Username,
-		Avatar:          newname,
 		OauthProvider:   sql.NullString{String: provider, Valid: true},
 		OauthProviderID: sql.NullString{String: userData.ID, Valid: true},
 	})
@@ -516,12 +523,24 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 		return
 	}
 
+	// Create user repositoty with default avatar and cover
+	err = server.storage.CreateUserRepo(account.AccountID.String())
+	if err != nil {
+		server.logger.Error("POST /oauth2/callback: failed to create user repo", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Download the image and rewrite the default avatar
+	server.logger.Info("Image path: ", filepath.Join(account.AccountID.String(), "avatar.png"), "")
+	server.storage.DownloadURL(userData.Avatar, filepath.Join(account.AccountID.String(), "avatar.png"))
+
 	// Return user info and tokens
 	var resp = loginResponse{
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       account.Avatar,
+		Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}

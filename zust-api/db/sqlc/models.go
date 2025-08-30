@@ -61,8 +61,6 @@ type Account struct {
 	Email           string         `json:"email"`
 	Username        string         `json:"username"`
 	Password        sql.NullString `json:"password"`
-	Avatar          string         `json:"avatar"`
-	Cover           string         `json:"cover"`
 	Description     sql.NullString `json:"description"`
 	Status          AccountStatus  `json:"status"`
 	OauthProvider   sql.NullString `json:"oauth_provider"`
