@@ -201,16 +201,13 @@ func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (server *Server) sendVerificationEmail(id, username, email string) error {
-	// Get configurations
-	config := util.GetConfig()
-
 	// Generate token: userID|timestamp and encode it with base64
 	token := util.Encode(fmt.Sprintf("%s|%d", id, time.Now().UnixNano()))
 
 	// Prepare email body
 	body, err := server.mailService.PrepareEmail(service.VerificationEmailData{
 		Username: username,
-		Link:     fmt.Sprintf("http://%s:%s/auth/verification?token=%s", config.Domain, config.Port, token),
+		Link:     fmt.Sprintf("http://%s:%s/auth/verification?token=%s", server.config.Domain, server.config.Port, token),
 	})
 	if err != nil {
 		return err
@@ -365,16 +362,14 @@ func (server *Server) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	// For each provider, fecth the client ID and client secret from the config
 	switch providerName {
 	case "github":
-		cfg := util.GetConfig()
 		provider = &GitHubProvider{
-			ClientID:     cfg.GithubClientID,
-			ClientSecret: cfg.GithubClientSecret,
+			ClientID:     server.config.GithubClientID,
+			ClientSecret: server.config.GithubClientSecret,
 		}
 	case "google":
-		cfg := util.GetConfig()
 		provider = &GoogleProvider{
-			ClientID:     cfg.GoogleClientID,
-			ClientSecret: cfg.GoogleClientSecret,
+			ClientID:     server.config.GoogleClientID,
+			ClientSecret: server.config.GoogleClientSecret,
 		}
 	default:
 		server.WriteError(w, http.StatusBadRequest, "Unknown provider")

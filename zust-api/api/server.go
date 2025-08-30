@@ -22,10 +22,13 @@ type Server struct {
 	mux         *http.ServeMux
 	logger      *slog.Logger
 	validate    *validator.Validate
+	config      *util.Config
 }
 
 // NewServer creates a new HTTP server and setup routing
 func NewServer(conn *sql.DB, logger *slog.Logger) *Server {
+	config := util.GetConfig()
+
 	server := &Server{
 		query:       db.New(conn),
 		jwtService:  service.NewJWTService(),
@@ -34,6 +37,7 @@ func NewServer(conn *sql.DB, logger *slog.Logger) *Server {
 		mux:         http.NewServeMux(),
 		logger:      logger,
 		validate:    validator.New(validator.WithRequiredStructEnabled()),
+		config:      &config,
 	}
 
 	server.RegisterHandler()
