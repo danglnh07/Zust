@@ -41,6 +41,9 @@ type Config struct {
 
 	// Resource path
 	ResourcePath string
+
+	// File upload constraint
+	ImageSize int64
 }
 
 var config Config
@@ -63,6 +66,13 @@ func LoadConfig(path string) error {
 		return err
 	}
 
+	// Parse image size constraint from string to int
+	imageSize, err := strconv.ParseInt(os.Getenv("MAX_IMAGE_SIZE"), 10, 64)
+	if err != nil {
+		return err
+	}
+	imageSize <<= 20 // Stored as byte
+
 	config = Config{
 		Domain:                     os.Getenv("DOMAIN"),
 		Port:                       os.Getenv("PORT"),
@@ -80,6 +90,7 @@ func LoadConfig(path string) error {
 		Email:                      os.Getenv("EMAIL"),
 		AppPassword:                os.Getenv("APP_PASSWORD"),
 		ResourcePath:               os.Getenv("RESOURCE_PATH"),
+		ImageSize:                  imageSize,
 	}
 	return err
 }

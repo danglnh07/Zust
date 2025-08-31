@@ -1,2 +1,8 @@
+DROP TABLE IF EXISTS favorite;
+DROP TABLE IF EXISTS watch_video;
+DROP TABLE IF EXISTS like_video;
+DROP TABLE IF EXISTS video;
+DROP TABLE IF EXISTS subscribe;
 DROP TABLE IF EXISTS account;
 DROP TYPE IF EXISTS account_status;
+DROP TYPE IF EXISTS video_status;

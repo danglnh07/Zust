@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -552,33 +553,31 @@ func (server *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	 * Error: 400 Bad Request, 500 Internal Server Error
 	 */
 
-	// Get the claims from the context
-	claims := r.Context().Value(key)
-
-	// Increment the token version to invalidate all existing tokens
+	// Extract account ID from claims
+	claims := r.Context().Value(clKey)
 	var uuid uuid.UUID
-	// The verify already checked if claims is correct CustomClaims type, so we don't need to check again
-	if err := uuid.Scan(claims.(*service.CustomClaims).ID); err != nil {
-		server.logger.Error("POST /logout: failed to parse account ID", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
+	uuid.Scan(claims.(*service.CustomClaims).ID)
 
-	err := server.query.IncrementTokenVersion(r.Context(), uuid)
-	if err != nil {
-		// If no account found with the account ID
-		if errors.Is(err, sql.ErrNoRows) {
-			server.WriteError(w, http.StatusBadRequest, "Account does not exist")
+	// Check if account status is active or not before continuing with the request
+	r = r.WithContext(context.WithValue(r.Context(), epKey, "POST /auth/logout"))
+	if _, isActive := server.checkAccountStatus(w, r, uuid); isActive {
+		// Increase token version to logout (logout from all account)
+		err := server.query.IncrementTokenVersion(r.Context(), uuid)
+		if err != nil {
+			// If no account found with the account ID
+			if errors.Is(err, sql.ErrNoRows) {
+				server.WriteError(w, http.StatusBadRequest, "Account does not exist")
+				return
+			}
+
+			// Other database error
+			server.logger.Error("POST /logout: failed to increment token version", "error", err)
+			server.WriteError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		// Other database error
-		server.logger.Error("POST /logout: failed to increment token version", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
+		server.WriteJSON(w, http.StatusOK, "Logged out successfully")
 	}
-
-	server.WriteJSON(w, http.StatusOK, "Logged out successfully")
 }
 
 func (server *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
@@ -586,45 +585,42 @@ func (server *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request)
 	 * POST auth/token/refresh
 	 * Success: 200 OK
 	 * Error: 400 Bad Request, 500 Internal Server Error
-	 *
-	 * Although this request did need authentication, but we won't use the AuthMiddleware since we need
-	 * the raw refresh token, not just the claims
 	 */
 
-	// Get the claims from the context
-	claims := r.Context().Value(key)
-
-	// Update token version in database to invalidate all existing tokens
+	// Extract account ID from claims
+	claims := r.Context().Value(clKey)
 	var uuid uuid.UUID
-	if err := uuid.Scan(claims.(*service.CustomClaims).ID); err != nil {
-		server.logger.Error("POST /auth/token/refresh: failed to parse account ID", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-	err := server.query.IncrementTokenVersion(r.Context(), uuid)
-	if err != nil {
-		// If no account found with the account ID
-		if errors.Is(err, sql.ErrNoRows) {
-			server.WriteError(w, http.StatusBadRequest, "Account does not exist")
+	uuid.Scan(claims.(*service.CustomClaims).ID)
+
+	// Check if account status is active or not before continuing with the request
+	r = r.WithContext(context.WithValue(r.Context(), epKey, "POST /auth/token/refresh"))
+	if _, isActive := server.checkAccountStatus(w, r, uuid); isActive {
+		// Increase token version to logout (logout from all account)
+		err := server.query.IncrementTokenVersion(r.Context(), uuid)
+		if err != nil {
+			// If no account found with the account ID
+			if errors.Is(err, sql.ErrNoRows) {
+				server.WriteError(w, http.StatusBadRequest, "Account does not exist")
+				return
+			}
+
+			// Other database error
+			server.logger.Error("POST /auth/token/refresh: failed to increment token version", "error", err)
+			server.WriteError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
 
-		// Other database error
-		server.logger.Error("POST /auth/token/refresh: failed to increment token version", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
+		// Create new access token using the refresh token
+		newAccessToken, err := server.jwtService.CreateToken(claims.(*service.CustomClaims).ID, "access-token",
+			claims.(*service.CustomClaims).Version+1, server.jwtService.TokenExpirationTime)
+		if err != nil {
+			server.logger.Error("POST /auth/token/refresh: failed to create new access token", "error", err)
+			server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
 
-	// Create new access token using the refresh token
-	newAccessToken, err := server.jwtService.CreateToken(claims.(*service.CustomClaims).ID, "access-token",
-		claims.(*service.CustomClaims).Version+1, server.jwtService.TokenExpirationTime)
-	if err != nil {
-		server.logger.Error("POST /auth/token/refresh: failed to create new access token", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
+		server.WriteJSON(w, http.StatusOK, map[string]string{
+			"access_token": newAccessToken,
+		})
 	}
-
-	server.WriteJSON(w, http.StatusOK, map[string]string{
-		"access_token": newAccessToken,
-	})
 }

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -56,6 +57,48 @@ func (ns NullAccountStatus) Value() (driver.Value, error) {
 	return string(ns.AccountStatus), nil
 }
 
+type VideoStatus string
+
+const (
+	VideoStatusPublished VideoStatus = "published"
+	VideoStatusDeleted   VideoStatus = "deleted"
+)
+
+func (e *VideoStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = VideoStatus(s)
+	case string:
+		*e = VideoStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for VideoStatus: %T", src)
+	}
+	return nil
+}
+
+type NullVideoStatus struct {
+	VideoStatus VideoStatus `json:"video_status"`
+	Valid       bool        `json:"valid"` // Valid is true if VideoStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullVideoStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.VideoStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.VideoStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullVideoStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.VideoStatus), nil
+}
+
 type Account struct {
 	AccountID       uuid.UUID      `json:"account_id"`
 	Email           string         `json:"email"`
@@ -66,4 +109,39 @@ type Account struct {
 	OauthProvider   sql.NullString `json:"oauth_provider"`
 	OauthProviderID sql.NullString `json:"oauth_provider_id"`
 	TokenVersion    int32          `json:"token_version"`
+}
+
+type Favorite struct {
+	VideoID   uuid.UUID `json:"video_id"`
+	AccountID uuid.UUID `json:"account_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type LikeVideo struct {
+	VideoID   uuid.UUID `json:"video_id"`
+	AccountID uuid.UUID `json:"account_id"`
+	LikeAt    time.Time `json:"like_at"`
+}
+
+type Subscribe struct {
+	SubscriberID  uuid.UUID `json:"subscriber_id"`
+	SubscribeToID uuid.UUID `json:"subscribe_to_id"`
+	SubscribeAt   time.Time `json:"subscribe_at"`
+}
+
+type Video struct {
+	VideoID     uuid.UUID      `json:"video_id"`
+	Title       string         `json:"title"`
+	Duration    int32          `json:"duration"`
+	Description sql.NullString `json:"description"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	PublisherID uuid.UUID      `json:"publisher_id"`
+	Status      VideoStatus    `json:"status"`
+}
+
+type WatchVideo struct {
+	VideoID   uuid.UUID `json:"video_id"`
+	AccountID uuid.UUID `json:"account_id"`
+	WatchAt   time.Time `json:"watch_at"`
 }

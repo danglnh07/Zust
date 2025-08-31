@@ -38,3 +38,27 @@ SELECT EXISTS (
 UPDATE account
 SET token_version = token_version + 1
 WHERE account_id = $1;
+
+-- name: GetProfile :one
+SELECT account_id, email, username, description, status FROM account
+WHERE account_id = $1;
+
+-- name: EditProfile :one
+UPDATE account
+SET username = $2, description = $3
+WHERE account_id = $1
+RETURNING account_id, email, username, description, status;
+
+-- name: LockAccount :exec
+UPDATE account
+SET status = 'locked'
+WHERE account_id = $1;
+
+-- name: Subscribe :one
+INSERT INTO subscribe (subscriber_id, subscribe_to_id)
+VALUES ($1, $2)
+RETURNING *;
+
+-- name: Unsubscribe :exec
+DELETE FROM subscribe
+WHERE subscriber_id = $1 AND subscribe_to_id = $2;

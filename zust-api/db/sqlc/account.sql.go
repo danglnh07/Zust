@@ -87,6 +87,40 @@ func (q *Queries) CreateAccountWithPassword(ctx context.Context, arg CreateAccou
 	return i, err
 }
 
+const editProfile = `-- name: EditProfile :one
+UPDATE account
+SET username = $2, description = $3
+WHERE account_id = $1
+RETURNING account_id, email, username, description, status
+`
+
+type EditProfileParams struct {
+	AccountID   uuid.UUID      `json:"account_id"`
+	Username    string         `json:"username"`
+	Description sql.NullString `json:"description"`
+}
+
+type EditProfileRow struct {
+	AccountID   uuid.UUID      `json:"account_id"`
+	Email       string         `json:"email"`
+	Username    string         `json:"username"`
+	Description sql.NullString `json:"description"`
+	Status      AccountStatus  `json:"status"`
+}
+
+func (q *Queries) EditProfile(ctx context.Context, arg EditProfileParams) (EditProfileRow, error) {
+	row := q.db.QueryRowContext(ctx, editProfile, arg.AccountID, arg.Username, arg.Description)
+	var i EditProfileRow
+	err := row.Scan(
+		&i.AccountID,
+		&i.Email,
+		&i.Username,
+		&i.Description,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getAccountByEmail = `-- name: GetAccountByEmail :one
 SELECT account_id, email, username, password, description, status, token_version FROM account
 WHERE email = $1
@@ -147,6 +181,32 @@ func (q *Queries) GetAccountByUsername(ctx context.Context, username string) (Ge
 	return i, err
 }
 
+const getProfile = `-- name: GetProfile :one
+SELECT account_id, email, username, description, status FROM account
+WHERE account_id = $1
+`
+
+type GetProfileRow struct {
+	AccountID   uuid.UUID      `json:"account_id"`
+	Email       string         `json:"email"`
+	Username    string         `json:"username"`
+	Description sql.NullString `json:"description"`
+	Status      AccountStatus  `json:"status"`
+}
+
+func (q *Queries) GetProfile(ctx context.Context, accountID uuid.UUID) (GetProfileRow, error) {
+	row := q.db.QueryRowContext(ctx, getProfile, accountID)
+	var i GetProfileRow
+	err := row.Scan(
+		&i.AccountID,
+		&i.Email,
+		&i.Username,
+		&i.Description,
+		&i.Status,
+	)
+	return i, err
+}
+
 const getTokenVersion = `-- name: GetTokenVersion :one
 SELECT token_version FROM account
 WHERE account_id = $1
@@ -188,6 +248,17 @@ func (q *Queries) IsAccountRegistered(ctx context.Context, arg IsAccountRegister
 	return exists, err
 }
 
+const lockAccount = `-- name: LockAccount :exec
+UPDATE account
+SET status = 'locked'
+WHERE account_id = $1
+`
+
+func (q *Queries) LockAccount(ctx context.Context, accountID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, lockAccount, accountID)
+	return err
+}
+
 const loginWithOAuth = `-- name: LoginWithOAuth :one
 SELECT account_id, email, username, description, status, token_version FROM account
 WHERE oauth_provider = $1 AND oauth_provider_id = $2
@@ -219,4 +290,37 @@ func (q *Queries) LoginWithOAuth(ctx context.Context, arg LoginWithOAuthParams) 
 		&i.TokenVersion,
 	)
 	return i, err
+}
+
+const subscribe = `-- name: Subscribe :one
+INSERT INTO subscribe (subscriber_id, subscribe_to_id)
+VALUES ($1, $2)
+RETURNING subscriber_id, subscribe_to_id, subscribe_at
+`
+
+type SubscribeParams struct {
+	SubscriberID  uuid.UUID `json:"subscriber_id"`
+	SubscribeToID uuid.UUID `json:"subscribe_to_id"`
+}
+
+func (q *Queries) Subscribe(ctx context.Context, arg SubscribeParams) (Subscribe, error) {
+	row := q.db.QueryRowContext(ctx, subscribe, arg.SubscriberID, arg.SubscribeToID)
+	var i Subscribe
+	err := row.Scan(&i.SubscriberID, &i.SubscribeToID, &i.SubscribeAt)
+	return i, err
+}
+
+const unsubscribe = `-- name: Unsubscribe :exec
+DELETE FROM subscribe
+WHERE subscriber_id = $1 AND subscribe_to_id = $2
+`
+
+type UnsubscribeParams struct {
+	SubscriberID  uuid.UUID `json:"subscriber_id"`
+	SubscribeToID uuid.UUID `json:"subscribe_to_id"`
+}
+
+func (q *Queries) Unsubscribe(ctx context.Context, arg UnsubscribeParams) error {
+	_, err := q.db.ExecContext(ctx, unsubscribe, arg.SubscriberID, arg.SubscribeToID)
+	return err
 }

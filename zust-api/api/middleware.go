@@ -10,13 +10,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// claimsKey is a custom type to avoid context key collisions
-type claimsKey string
-
-// key is the key used to store and retrieve claims from the request context.
-// Its value can be whatever
-var key claimsKey = "claims"
-
 // AuthMiddleware is a middleware that checks for a valid JWT token in the Authorization header
 func (server *Server) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +44,7 @@ func (server *Server) AuthMiddleware(next http.Handler) http.Handler {
 		if claims.TokenType == "refresh-token" && path == "/auth/token/refresh" ||
 			claims.TokenType == "access-token" && path != "/auth/token/refresh" {
 			// Extract the claims and put them in the request context
-			r = r.WithContext(context.WithValue(r.Context(), key, claims))
+			r = r.WithContext(context.WithValue(r.Context(), clKey, claims))
 			next.ServeHTTP(w, r)
 			return
 		}

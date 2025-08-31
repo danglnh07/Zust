@@ -11,6 +11,16 @@ import (
 	"zust/util"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
+)
+
+// Custom type to avoid context key collisions
+type claimsKey string
+type endpointKey string
+
+var (
+	clKey claimsKey   = "claims"
+	epKey endpointKey = "endpoint"
 )
 
 // Server struct
@@ -58,6 +68,18 @@ func (server *Server) RegisterHandler() {
 	server.mux.HandleFunc("GET /oauth2/callback", server.HandleCallback)
 	server.mux.Handle("POST /auth/token/refresh", server.AuthMiddleware(http.HandlerFunc(server.HandleRefreshToken)))
 	server.mux.Handle("POST /auth/logout", server.AuthMiddleware(http.HandlerFunc(server.HandleLogout)))
+
+	// Account routes
+	server.mux.HandleFunc("GET /accounts/{id}", server.HandleGetProfile)
+	server.mux.Handle("PUT /accounts/{id}", server.AuthMiddleware(http.HandlerFunc(server.HandleEditProfile)))
+	server.mux.Handle("POST /accounts/{id}/lock", server.AuthMiddleware(http.HandlerFunc(server.HandleLockAccount)))
+	server.mux.Handle("POST /subscribe", server.AuthMiddleware(http.HandlerFunc(server.HandleSubscribe)))
+	server.mux.Handle("DELETE /subscribe", server.AuthMiddleware(http.HandlerFunc(server.HandleUnsubscribe)))
+
+	// Video routes
+	server.mux.Handle("POST /videos/", server.AuthMiddleware(http.HandlerFunc(server.HandleCreateVideo)))
+	server.mux.HandleFunc("GET /videos/{id}", server.HandleGetVideo)
+
 }
 
 // Start runs the HTTP server on a specific address
@@ -83,4 +105,38 @@ func (server *Server) WriteJSON(w http.ResponseWriter, status int, data any) {
 	json.NewEncoder(w).Encode(map[string]any{
 		"data": data,
 	})
+}
+
+// Method to check if the request account status is active or not before processing request
+func (server *Server) checkAccountStatus(w http.ResponseWriter, r *http.Request, accountID uuid.UUID) (*db.GetProfileRow, bool) {
+	// Get old profile from database
+	oldProfile, err := server.query.GetProfile(r.Context(), accountID)
+	if err != nil {
+		// Here, we assume that account ID should exist in DB (by checking if the data passed to this method equal
+		// to account ID extract from access token, and since access token already assure that ID exist by verifying
+		// the token -> accountID should match)
+		server.logger.Error(fmt.Sprintf("%s: failed to get account status for checking", r.Context().Value(epKey)),
+			"error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return nil, false
+	}
+
+	// Check if account status is active before processing request
+	if oldProfile.Status != db.AccountStatusActive {
+		return nil, false
+	}
+
+	return &oldProfile, true
+}
+
+// Method to check if the account ID provided in the request data match with the ID extract from the access token
+func (server *Server) checkIDMatch(w http.ResponseWriter, r *http.Request, accountID string) bool {
+	// Get the account ID from the claims and check if they match with the account ID given in request data
+	claims := r.Context().Value(clKey)
+	if claims.(*service.CustomClaims).ID != accountID {
+		server.WriteError(w, http.StatusBadRequest, "Account ID not match with the ID from access token")
+		return false
+	}
+
+	return true
 }
