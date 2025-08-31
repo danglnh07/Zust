@@ -177,6 +177,40 @@ func (server *Server) HandleLockAccount(w http.ResponseWriter, r *http.Request) 
 	server.WriteJSON(w, http.StatusCreated, fmt.Sprintf("Account with ID %s locked successfully", accID.String()))
 }
 
+func (server *Server) HandleUnlockAccount(w http.ResponseWriter, r *http.Request) {
+	// Check if the account ID in path parameter match with the ID extract from access token
+	if isIDMatched := server.checkIDMatch(w, r, r.PathValue("id")); !isIDMatched {
+		return
+	}
+
+	// Get account ID
+	var accountID uuid.UUID
+	accountID.Scan(r.PathValue("id"))
+
+	// Check account status if it's locked or not before processing with the request
+	oldProfile, err := server.query.GetProfile(r.Context(), accountID)
+	if err != nil {
+		server.logger.Error("POST /accounts/{id}/unlock: failed to get profile for status checking", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if oldProfile.Status != db.AccountStatusLocked {
+		server.WriteError(w, http.StatusBadRequest, "This account is not locked, so cannot unlock it")
+		return
+	}
+
+	// Unlock account
+	err = server.query.UnlockAccount(r.Context(), accountID)
+	if err != nil {
+		server.logger.Error("POST /accounts/{id}/unlock: failed to unlock account", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	server.WriteJSON(w, http.StatusCreated, fmt.Sprintf("Account with ID %s unlocked successfully", accountID.String()))
+}
+
 type subscribeRequest struct {
 	SubscriberID   uuid.UUID `json:"subscriber_id" validate:"required"`
 	SubscriberToID uuid.UUID `json:"subscribe_to_id" validate:"required"`

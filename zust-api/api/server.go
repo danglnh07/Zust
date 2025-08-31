@@ -73,6 +73,7 @@ func (server *Server) RegisterHandler() {
 	server.mux.HandleFunc("GET /accounts/{id}", server.HandleGetProfile)
 	server.mux.Handle("PUT /accounts/{id}", server.AuthMiddleware(http.HandlerFunc(server.HandleEditProfile)))
 	server.mux.Handle("POST /accounts/{id}/lock", server.AuthMiddleware(http.HandlerFunc(server.HandleLockAccount)))
+	server.mux.Handle("POST /accounts/{id}/unlock", server.AuthMiddleware(http.HandlerFunc(server.HandleUnlockAccount)))
 	server.mux.Handle("POST /subscribe", server.AuthMiddleware(http.HandlerFunc(server.HandleSubscribe)))
 	server.mux.Handle("DELETE /subscribe", server.AuthMiddleware(http.HandlerFunc(server.HandleUnsubscribe)))
 

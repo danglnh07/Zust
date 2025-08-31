@@ -54,6 +54,11 @@ UPDATE account
 SET status = 'locked'
 WHERE account_id = $1;
 
+-- name: UnlockAccount :exec
+UPDATE account
+SET status = 'active'
+WHERE account_id = $1;
+
 -- name: Subscribe :one
 INSERT INTO subscribe (subscriber_id, subscribe_to_id)
 VALUES ($1, $2)

@@ -310,6 +310,17 @@ func (q *Queries) Subscribe(ctx context.Context, arg SubscribeParams) (Subscribe
 	return i, err
 }
 
+const unlockAccount = `-- name: UnlockAccount :exec
+UPDATE account
+SET status = 'active'
+WHERE account_id = $1
+`
+
+func (q *Queries) UnlockAccount(ctx context.Context, accountID uuid.UUID) error {
+	_, err := q.db.ExecContext(ctx, unlockAccount, accountID)
+	return err
+}
+
 const unsubscribe = `-- name: Unsubscribe :exec
 DELETE FROM subscribe
 WHERE subscriber_id = $1 AND subscribe_to_id = $2
