@@ -1,0 +1,5 @@
+# Ignore internal docs
+docs/internal/
+
+# Ignore stogare
+storage/
