@@ -85,7 +85,7 @@ func (storage *LocalStorage) CreateUserRepo(accID string) error {
 	}
 	defer destAvatar.Close()
 
-	_, err = io.Copy(destAvatar, srcAvatar) // <-- Fix: dest first, src second
+	_, err = io.Copy(destAvatar, srcAvatar)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (storage *LocalStorage) CreateUserRepo(accID string) error {
 	}
 	defer destCover.Close()
 
-	_, err = io.Copy(destCover, srcCover) // <-- Fix: dest first, src second
+	_, err = io.Copy(destCover, srcCover)
 	if err != nil {
 		return err
 	}

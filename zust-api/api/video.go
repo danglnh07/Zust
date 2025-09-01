@@ -3,15 +3,132 @@ package api
 import (
 	"database/sql"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
+	db "zust/db/sqlc"
 	"zust/service"
 
 	"github.com/google/uuid"
 )
 
 func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) {
+	// Check if requester account status is active or not
+	var accountID uuid.UUID
+	accountID.Scan(r.Context().Value(clKey))
+	if _, isActive := server.checkAccountStatus(w, r, accountID); !isActive {
+		return
+	}
 
+	// Get video metadata and insert into database with status 'pending'
+	if err := r.ParseMultipartForm(server.config.VideoSize); err != nil {
+		server.WriteError(w, http.StatusBadRequest, "Failed to parse multipart form")
+		return
+	}
+
+	title := strings.TrimSpace(r.FormValue("title"))
+	if title == "" {
+		server.WriteError(w, http.StatusBadRequest, "Title cannot be empty")
+		return
+	}
+
+	desc := strings.TrimSpace(r.FormValue("description"))
+	var description sql.NullString
+	description.Scan(desc)
+
+	publisherID := r.FormValue("publisher_id")
+	if publisherID != accountID.String() {
+		server.WriteError(w, http.StatusBadRequest, "Publisher ID must be the ID of the requester")
+		return
+	}
+
+	video, err := server.query.CreateVideo(r.Context(), db.CreateVideoParams{
+		Title:       title,
+		Description: description,
+		PublisherID: accountID,
+	})
+
+	if err != nil {
+		server.logger.Error("POST /videos: failed to create video", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Try downloading uploaded video
+	resource, _, err := r.FormFile("resource")
+	if err != nil || resource == nil {
+		server.WriteError(w, http.StatusBadRequest, "Failed to read uploaded video")
+		return
+	}
+	defer resource.Close()
+
+	base := filepath.Join(server.config.ResourcePath, accountID.String())
+	filename := filepath.Join(base, "resource", fmt.Sprintf("%s.mp4", video.VideoID.String()))
+	dest, err := os.Create(filename)
+	if err != nil {
+		server.logger.Error("POST /videos: failed to create resource video file in local storage", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, resource)
+	if err != nil {
+		server.logger.Error("POST /videos: failed to copy the user uploaded video to local storage", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Get video duration
+	duration, err := service.GetVideoDuration(filename)
+	if err != nil {
+		server.logger.Error("POST /videos: failed to get video duration", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Get and download thumbnail
+	thumbnail, _, err := r.FormFile("thumbnail")
+	if err != nil || thumbnail == nil {
+		server.WriteError(w, http.StatusBadRequest, "Failed to read uploaded video")
+		return
+	}
+
+	filename = filepath.Join(base, "thumbnail", fmt.Sprintf("%s.png", video.VideoID.String()))
+	dest, err = os.Create(filename)
+	if err != nil {
+		server.logger.Error("POST /videos: failed to create thumbnail file in local storage", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	_, err = io.Copy(dest, thumbnail)
+	if err != nil {
+		server.logger.Error("POST /videos: failed to copy the user uploaded thumbnail to local storage", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Update the video metadata in database with duration and status 'published'
+	publishedVideo, err := server.query.PublishVideo(r.Context(), db.PublishVideoParams{
+		VideoID:  video.VideoID,
+		Duration: duration,
+	})
+
+	if err != nil {
+		server.logger.Error("POST /videos: failed to published video", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	// Return the result back to client
+	server.WriteJSON(w, http.StatusCreated, publishedVideo)
+
+	// Transcode video (background services)
 }
 
 type getVideoResponse struct {

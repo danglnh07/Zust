@@ -1,6 +1,6 @@
 -- Create enum
 CREATE TYPE account_status AS ENUM ('inactive', 'active', 'banned', 'locked');
-CREATE TYPE video_status AS ENUM ('published', 'deleted');
+CREATE TYPE video_status AS ENUM ('pending', 'published', 'deleted');
 
 -- Create table account
 CREATE TABLE IF NOT EXISTS account (
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS video (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     publisher_id UUID NOT NULL REFERENCES account(account_id),
-    status video_status NOT NULL DEFAULT video_status('published')
+    status video_status NOT NULL DEFAULT video_status('pending')
 );
 
 -- Create table like_video

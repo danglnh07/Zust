@@ -1,6 +1,12 @@
 -- name: CreateVideo :one
-INSERT INTO video (title, duration, description, publisher_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO video (title, description, publisher_id)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: PublishVideo :one
+UPDATE video
+SET duration = $2, status = 'published'
+WHERE video_id = $1
 RETURNING *;
 
 -- name: GetVideo :one

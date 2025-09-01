@@ -14,25 +14,19 @@ import (
 )
 
 const createVideo = `-- name: CreateVideo :one
-INSERT INTO video (title, duration, description, publisher_id)
-VALUES ($1, $2, $3, $4)
+INSERT INTO video (title, description, publisher_id)
+VALUES ($1, $2, $3)
 RETURNING video_id, title, duration, description, created_at, updated_at, publisher_id, status
 `
 
 type CreateVideoParams struct {
 	Title       string         `json:"title"`
-	Duration    int32          `json:"duration"`
 	Description sql.NullString `json:"description"`
 	PublisherID uuid.UUID      `json:"publisher_id"`
 }
 
 func (q *Queries) CreateVideo(ctx context.Context, arg CreateVideoParams) (Video, error) {
-	row := q.db.QueryRowContext(ctx, createVideo,
-		arg.Title,
-		arg.Duration,
-		arg.Description,
-		arg.PublisherID,
-	)
+	row := q.db.QueryRowContext(ctx, createVideo, arg.Title, arg.Description, arg.PublisherID)
 	var i Video
 	err := row.Scan(
 		&i.VideoID,
@@ -86,6 +80,34 @@ func (q *Queries) GetVideo(ctx context.Context, videoID uuid.UUID) (GetVideoRow,
 		&i.TotalSubscriber,
 		&i.TotalView,
 		&i.TotalLike,
+	)
+	return i, err
+}
+
+const publishVideo = `-- name: PublishVideo :one
+UPDATE video
+SET duration = $2, status = 'published'
+WHERE video_id = $1
+RETURNING video_id, title, duration, description, created_at, updated_at, publisher_id, status
+`
+
+type PublishVideoParams struct {
+	VideoID  uuid.UUID `json:"video_id"`
+	Duration int32     `json:"duration"`
+}
+
+func (q *Queries) PublishVideo(ctx context.Context, arg PublishVideoParams) (Video, error) {
+	row := q.db.QueryRowContext(ctx, publishVideo, arg.VideoID, arg.Duration)
+	var i Video
+	err := row.Scan(
+		&i.VideoID,
+		&i.Title,
+		&i.Duration,
+		&i.Description,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.PublisherID,
+		&i.Status,
 	)
 	return i, err
 }

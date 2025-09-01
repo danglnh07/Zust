@@ -44,6 +44,7 @@ type Config struct {
 
 	// File upload constraint
 	ImageSize int64
+	VideoSize int64
 }
 
 var config Config
@@ -73,6 +74,13 @@ func LoadConfig(path string) error {
 	}
 	imageSize <<= 20 // Stored as byte
 
+	// Parse video size constraint from string to int
+	videoSize, err := strconv.ParseInt(os.Getenv("MAX_VIDEO_UPLOAD"), 10, 64)
+	if err != nil {
+		return err
+	}
+	videoSize <<= 20
+
 	config = Config{
 		Domain:                     os.Getenv("DOMAIN"),
 		Port:                       os.Getenv("PORT"),
@@ -91,6 +99,7 @@ func LoadConfig(path string) error {
 		AppPassword:                os.Getenv("APP_PASSWORD"),
 		ResourcePath:               os.Getenv("RESOURCE_PATH"),
 		ImageSize:                  imageSize,
+		VideoSize:                  videoSize,
 	}
 	return err
 }

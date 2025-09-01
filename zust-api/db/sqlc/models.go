@@ -60,6 +60,7 @@ func (ns NullAccountStatus) Value() (driver.Value, error) {
 type VideoStatus string
 
 const (
+	VideoStatusPending   VideoStatus = "pending"
 	VideoStatusPublished VideoStatus = "published"
 	VideoStatusDeleted   VideoStatus = "deleted"
 )
