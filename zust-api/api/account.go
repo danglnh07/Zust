@@ -162,7 +162,7 @@ func (server *Server) HandleLockAccount(w http.ResponseWriter, r *http.Request) 
 	var accID uuid.UUID
 	accID.Scan(r.PathValue("id"))
 	r = r.WithContext(context.WithValue(r.Context(), epKey, "POST /accounts/{id}/lock"))
-	if _, isActive := server.checkAccountStatus(w, r, accID); isActive {
+	if _, isActive := server.checkAccountStatus(w, r, accID); !isActive {
 		return
 	}
 

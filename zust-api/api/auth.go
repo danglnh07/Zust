@@ -166,13 +166,13 @@ func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		// If the email is already taken
-		if strings.Contains(err.Error(), "accounts_email_key") {
+		if strings.Contains(err.Error(), "account_email_key") {
 			server.WriteError(w, http.StatusBadRequest, "Email is already taken")
 			return
 		}
 
 		// If the username is already taken
-		if strings.Contains(err.Error(), "accounts_username_key") {
+		if strings.Contains(err.Error(), "account_username_key") {
 			server.WriteError(w, http.StatusBadRequest, "Username is already taken")
 			return
 		}
@@ -486,13 +486,13 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 	})
 	if err != nil {
 		// If the email is already taken
-		if strings.Contains(err.Error(), "accounts_email_key") {
+		if strings.Contains(err.Error(), "account_email_key") {
 			server.WriteError(w, http.StatusBadRequest, "Email is already taken")
 			return
 		}
 
 		// If the username is already taken
-		if strings.Contains(err.Error(), "accounts_username_key") {
+		if strings.Contains(err.Error(), "account_username_key") {
 			server.WriteError(w, http.StatusBadRequest, "Username is already taken")
 			return
 		}
