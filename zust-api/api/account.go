@@ -67,7 +67,7 @@ func (server *Server) HandleEditProfile(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Parse request multipart form data
-	r.Body = http.MaxBytesReader(w, r.Body, int64(server.config.ImageSize))
+	r.Body = http.MaxBytesReader(w, r.Body, server.config.ImageSize)
 	base := filepath.Join(server.config.ResourcePath, accID.String())
 
 	// Get new avatar image if provided
