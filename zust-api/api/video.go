@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 	db "zust/db/sqlc"
-	"zust/service"
 
 	"github.com/google/uuid"
 )
@@ -83,10 +82,19 @@ func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Get video duration
-	duration, err := service.GetVideoDuration(filename)
+	// Get video duration and update to database
+	duration, err := server.storage.GetVideoDuration(filename)
 	if err != nil {
 		server.logger.Error("POST /videos: failed to get video duration", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+	err = server.query.UpdateVideoDuration(r.Context(), db.UpdateVideoDurationParams{
+		VideoID:  video.VideoID,
+		Duration: duration,
+	})
+	if err != nil {
+		server.logger.Error("POST /videos: failed to update video duration to database", "error", err)
 		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -113,20 +121,8 @@ func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Update the video metadata in database with duration and status 'published'
-	publishedVideo, err := server.query.PublishVideo(r.Context(), db.PublishVideoParams{
-		VideoID:  video.VideoID,
-		Duration: duration,
-	})
-
-	if err != nil {
-		server.logger.Error("POST /videos: failed to published video", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
 	// Return the result back to client
-	server.WriteJSON(w, http.StatusCreated, publishedVideo)
+	server.WriteJSON(w, http.StatusCreated, "Video uploaded successfully! The video may not available because of the speed of processing")
 
 	// Transcode video (background services)
 }
@@ -173,18 +169,80 @@ func (server *Server) HandleGetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prepare data for returning back to client
+	// Check video status
+	switch video.Status {
+	case db.VideoStatusDeleted:
+		server.WriteError(w, http.StatusForbidden, "Video is deleted")
+	case db.VideoStatusPending:
+		server.WriteError(w, http.StatusBadRequest, "Video is not available for now")
+	}
+
+	// Get video based on request parameter
+	resourceName := video.VideoID.String()
+	switch r.URL.Query().Get("resolution") {
+	case "":
+		resourceName += ".mp4"
+	case "1080p":
+		resourceName += "_1080p.mp4"
+	case "720p":
+		resourceName += "_720p.mp4"
+	case "480p":
+		resourceName += "_480p.mp4"
+	default:
+		server.WriteError(w, http.StatusBadRequest, "Unsupport resolution")
+		return
+	}
+
+	videoMedia, err := server.storage.GenerateMediaLink(
+		video.AccountID.String(),
+		"resource",
+		resourceName,
+		server.config.Domain,
+		server.config.Port,
+	)
+	if err != nil {
+		server.logger.Error("GET /videos{id}: failed to generate media link for resource", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	thumbnailMedia, err := server.storage.GenerateMediaLink(
+		video.AccountID.String(),
+		"thumbnail",
+		fmt.Sprintf("%s.png", video.VideoID.String()),
+		server.config.Domain,
+		server.config.Port,
+	)
+	if err != nil {
+		server.logger.Error("GET /videos{id}: failed to generate media link for thumbnail", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	avatarMedia, err := server.storage.GenerateMediaLink(
+		video.AccountID.String(),
+		"avatar",
+		"avatar.png",
+		server.config.Domain,
+		server.config.Port,
+	)
+	if err != nil {
+		server.logger.Error("GET /videos{id}: failed to generate media link for avatar", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
 	data := getVideoResponse{
 		ID:                video.VideoID.String(),
 		Title:             video.Title,
-		Media:             service.GenerateMediaLink(video.AccountID.String(), "video", video.VideoID.String()), // We use video ID as filename for now
-		Thumbnail:         service.GenerateMediaLink(video.AccountID.String(), "thumbnail", video.VideoID.String()),
+		Media:             videoMedia,
+		Thumbnail:         thumbnailMedia,
 		Duration:          int(video.Duration),
 		Description:       video.Description.String,
 		CreatedAt:         video.CreatedAt,
 		PublisherID:       video.AccountID.String(),
 		PublisherUsername: video.Username,
-		PublisherAvatar:   service.GenerateMediaLink(video.AccountID.String(), "avatar", "avatar.png"),
+		PublisherAvatar:   avatarMedia,
 		TotalSubscriber:   int(video.TotalSubscriber),
 		TotakLike:         int(video.TotalLike),
 		TotalView:         int(video.TotalView),

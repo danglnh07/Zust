@@ -3,15 +3,20 @@ INSERT INTO video (title, description, publisher_id)
 VALUES ($1, $2, $3)
 RETURNING *;
 
+-- name: UpdateVideoDuration :exec
+UPDATE video
+SET duration = $2
+WHERE video_id = $1;
+
 -- name: PublishVideo :one
 UPDATE video
-SET duration = $2, status = 'published'
+SET status = 'published'
 WHERE video_id = $1
 RETURNING *;
 
 -- name: GetVideo :one
 SELECT 
-    v.video_id, v.title, v.duration, v.description, v.created_at,
+    v.video_id, v.title, v.duration, v.description, v.created_at, v.status,
     a.account_id, a.username,
     (SELECT COUNT(*) FROM subscribe s WHERE s.subscribe_to_id = v.publisher_id) AS total_subscriber,
     (SELECT COUNT(*) FROM watch_video wv WHERE wv.video_id = v.video_id) AS total_view,

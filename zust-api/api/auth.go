@@ -108,12 +108,25 @@ func (server *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	avatar, err := server.storage.GenerateMediaLink(
+		account.AccountID.String(),
+		"avatar",
+		"avatar.png",
+		server.config.Domain,
+		server.config.Port,
+	)
+	if err != nil {
+		server.logger.Error("POST /auth/login: failed to generate avatar media link", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
 	// Return user info and tokens
 	var resp = loginResponse{
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
+		Avatar:       avatar,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
@@ -451,12 +464,25 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 			return
 		}
 
+		avatar, err := server.storage.GenerateMediaLink(
+			account.AccountID.String(),
+			"avatar",
+			"avatar.png",
+			server.config.Domain,
+			server.config.Port,
+		)
+		if err != nil {
+			server.logger.Error("GET /oauth2/callback: failed to generate avatar media link", "error", err)
+			server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+			return
+		}
+
 		// Return user info and tokens
 		var resp = loginResponse{
 			ID:           account.AccountID.String(),
 			Email:        account.Email,
 			Username:     account.Username,
-			Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
+			Avatar:       avatar,
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 		}
@@ -532,11 +558,24 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 	server.storage.DownloadURL(userData.Avatar, filepath.Join(account.AccountID.String(), "avatar.png"))
 
 	// Return user info and tokens
+	avatar, err := server.storage.GenerateMediaLink(
+		account.AccountID.String(),
+		"avatar",
+		"avatar.png",
+		server.config.Domain,
+		server.config.Port,
+	)
+	if err != nil {
+		server.logger.Error("GET /oauth/callback: failed to generate avatar media link", "error", err)
+		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
 	var resp = loginResponse{
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       service.GenerateMediaLink(account.AccountID.String(), "avatar", "avatar.png"),
+		Avatar:       avatar,
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}

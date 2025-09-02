@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"zust/service"
 )
 
 func (server *Server) HandleFile(w http.ResponseWriter, r *http.Request) {
@@ -10,7 +9,7 @@ func (server *Server) HandleFile(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 
 	// Get file path
-	path := service.ExtractFilePath(id)
+	path := server.storage.ExtractFilePath(id)
 
 	// Serve file
 	http.ServeFile(w, r, path)
