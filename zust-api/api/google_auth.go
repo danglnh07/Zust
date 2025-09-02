@@ -7,13 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"zust/util"
 )
 
 // Google provider implementation
 type GoogleProvider struct {
 	ClientID     string
 	ClientSecret string
+	Domain       string
+	Port         string
 }
 
 func (g *GoogleProvider) Name() string {
@@ -27,7 +28,7 @@ func (g *GoogleProvider) ExchangeToken(code string) (*tokenResponse, error) {
 	reqParams.Set("client_secret", g.ClientSecret)
 	reqParams.Set("code", code)
 	reqParams.Set("grant_type", "authorization_code")
-	reqParams.Set("redirect_uri", fmt.Sprintf("http://%s:%s/oauth2/callback", util.GetConfig().Domain, util.GetConfig().Port))
+	reqParams.Set("redirect_uri", fmt.Sprintf("http://%s:%s/oauth2/callback", g.Domain, g.Port))
 
 	// Create request to access token endpoint
 	req, err := http.NewRequest("POST", "https://oauth2.googleapis.com/token", strings.NewReader(reqParams.Encode()))

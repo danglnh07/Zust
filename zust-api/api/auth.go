@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 	db "zust/db/sqlc"
-	"zust/service"
-	"zust/util"
+	"zust/service/file"
+	"zust/service/mail"
+	"zust/service/security"
 
 	"github.com/google/uuid"
 )
@@ -36,14 +37,11 @@ type loginResponse struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// HandleLogin handles the login with username and password
+// HandleLogin handles the login with username and password.
+// Endpoint: POST /auth/login
+// Success: 200
+// Fail: 400, 403, 500
 func (server *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * POST auth/login
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 403 Forbidden, 500 Internal Server Error
-	 */
-
 	// Extract the request body
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -87,7 +85,7 @@ func (server *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if the password is correct
-	if !util.BcryptCompare(account.Password.String, req.Password) {
+	if !security.BcryptCompare(account.Password.String, req.Password) {
 		server.WriteError(w, http.StatusBadRequest, "Invalid username or password")
 		return
 	}
@@ -108,25 +106,12 @@ func (server *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	avatar, err := server.storage.GenerateMediaLink(
-		account.AccountID.String(),
-		"avatar",
-		"avatar.png",
-		server.config.Domain,
-		server.config.Port,
-	)
-	if err != nil {
-		server.logger.Error("POST /auth/login: failed to generate avatar media link", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
 	// Return user info and tokens
 	var resp = loginResponse{
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       avatar,
+		Avatar:       server.mediaService.GenerateMediaLink(account.AccountID.String(), "avatar.png", file.Avatar),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
@@ -140,14 +125,11 @@ type registerRequest struct {
 	Password string `json:"password" validate:"required"`
 }
 
-// HandleRegister handles the register with email, username and password
+// HandleRegister handles the register with email, username and password.
+// endoint: POST /auth/register
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * POST auth/register
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Extract the request body
 	var req registerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -164,7 +146,7 @@ func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Hash the password
-	hashedPassword, err := util.BcryptHash(req.Password)
+	hashedPassword, err := security.BcryptHash(req.Password)
 	if err != nil {
 		server.logger.Error("POST /register: failed to hash password", "error", err)
 		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
@@ -214,12 +196,13 @@ func (server *Server) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	server.WriteJSON(w, http.StatusOK, "Account created successfully")
 }
 
+// Helper method: send verification email
 func (server *Server) sendVerificationEmail(id, username, email string) error {
 	// Generate token: userID|timestamp and encode it with base64
-	token := util.Encode(fmt.Sprintf("%s|%d", id, time.Now().UnixNano()))
+	token := security.Encode(fmt.Sprintf("%s|%d", id, time.Now().UnixNano()))
 
 	// Prepare email body
-	body, err := server.mailService.PrepareEmail(service.VerificationEmailData{
+	body, err := server.mailService.PrepareEmail("template/verification.html", mail.VerificationEmailPayload{
 		Username: username,
 		Link:     fmt.Sprintf("http://%s:%s/auth/verification?token=%s", server.config.Domain, server.config.Port, token),
 	})
@@ -231,13 +214,11 @@ func (server *Server) sendVerificationEmail(id, username, email string) error {
 	return server.mailService.SendEmail(email, "Zust - Verify your email", body)
 }
 
+// HandleVerify handles the verification of the account and activate it.
+// endpoint: GET /auth/verification?token=TOKEN
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleVerify(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * GET auth/verification?token=...
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Get the token from query params
 	token := r.URL.Query().Get("token")
 	if token == "" {
@@ -246,7 +227,7 @@ func (server *Server) HandleVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Decode the token to get the account ID
-	decodeToken := util.Decode(token)
+	decodeToken := security.Decode(token)
 
 	// Split the decoded string to get the account ID and timestamp
 	parts := strings.Split(decodeToken, "|")
@@ -292,13 +273,11 @@ func (server *Server) HandleVerify(w http.ResponseWriter, r *http.Request) {
 	server.WriteJSON(w, http.StatusOK, "Account verified successfully")
 }
 
+// HandleResendVerification will send the verification email to the email given
+// endpoint: POST /auth/verification/resend?email=EMAIL
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleResendVerification(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * POST auth/verification/resend?email=...
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Get the email from query params
 	email := r.URL.Query().Get("email")
 	if email == "" {
@@ -362,13 +341,10 @@ type OAuthProvider interface {
 }
 
 // HandleCallback handles the OAuth callback from provider
+// endpoint: GET /oauth2/callback?code=...&state=...
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleCallback(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * GET /oauth2/callback?code=...&state=...
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Get the OAuth provider
 	providerName := r.URL.Query().Get("state")
 	var provider OAuthProvider
@@ -384,6 +360,8 @@ func (server *Server) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		provider = &GoogleProvider{
 			ClientID:     server.config.GoogleClientID,
 			ClientSecret: server.config.GoogleClientSecret,
+			Domain:       server.config.Domain,
+			Port:         server.config.Port,
 		}
 	default:
 		server.WriteError(w, http.StatusBadRequest, "Unknown provider")
@@ -464,44 +442,18 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 			return
 		}
 
-		avatar, err := server.storage.GenerateMediaLink(
-			account.AccountID.String(),
-			"avatar",
-			"avatar.png",
-			server.config.Domain,
-			server.config.Port,
-		)
-		if err != nil {
-			server.logger.Error("GET /oauth2/callback: failed to generate avatar media link", "error", err)
-			server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-			return
-		}
-
 		// Return user info and tokens
 		var resp = loginResponse{
 			ID:           account.AccountID.String(),
 			Email:        account.Email,
 			Username:     account.Username,
-			Avatar:       avatar,
+			Avatar:       server.mediaService.GenerateMediaLink(account.AccountID.String(), "avatar.png", file.Avatar),
 			AccessToken:  accessToken,
 			RefreshToken: refreshToken,
 		}
 		server.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-
-	/*
-	 * If the account is not registered:
-	 * 1. Create a new account with the user data from OAuth provider
-	 * 2. Create JWT tokens (access token and refresh token)
-	 * 3. Return user info and tokens
-	 * Note: as for the avatar:
-	 * 1. We will run the downloading as a background task, so the user can use the app immediately
-	 * 2. Downloading will have retry mechanism, if failed after 3 times, we will just use the default avatar
-	 * 3. Since the avatar is located under the a folder named with the user ID, so there will be no conflict even if we
-	 * user avatar.png as the value (hence the database don't need to store the full path to the avatar image). Same logic
-	 * apply to the cover image
-	 */
 
 	// If account is not registered, create a new account
 	account, err := server.query.CreateAccountWithOAuth(r.Context(), db.CreateAccountWithOAuthParams{
@@ -554,28 +506,17 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 	}
 
 	// Download the image and rewrite the default avatar
-	server.logger.Info("Image path: ", filepath.Join(account.AccountID.String(), "avatar.png"), "")
-	server.storage.DownloadURL(userData.Avatar, filepath.Join(account.AccountID.String(), "avatar.png"))
+	server.storage.DownloadURL(
+		userData.Avatar,
+		filepath.Join(server.config.ResourcePath, account.AccountID.String(), "avatar.png"),
+	)
 
 	// Return user info and tokens
-	avatar, err := server.storage.GenerateMediaLink(
-		account.AccountID.String(),
-		"avatar",
-		"avatar.png",
-		server.config.Domain,
-		server.config.Port,
-	)
-	if err != nil {
-		server.logger.Error("GET /oauth/callback: failed to generate avatar media link", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
 	var resp = loginResponse{
 		ID:           account.AccountID.String(),
 		Email:        account.Email,
 		Username:     account.Username,
-		Avatar:       avatar,
+		Avatar:       server.mediaService.GenerateMediaLink(account.AccountID.String(), "avatar.png", file.Avatar),
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}
@@ -584,18 +525,15 @@ func (server *Server) handleOAuth(w http.ResponseWriter, r *http.Request, userDa
 
 /*=== Auth shared logic ===*/
 
-// HandleLogout handles the logout by invalidating the current tokens version
+// HandleLogout handles the logout by invalidating the current tokens version.
+// endpoint: POST /auth/logout
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * POST auth/logout
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Extract account ID from claims
 	claims := r.Context().Value(clKey)
 	var uuid uuid.UUID
-	uuid.Scan(claims.(*service.CustomClaims).ID)
+	uuid.Scan(claims.(*security.CustomClaims).ID)
 
 	// Check if account status is active or not before continuing with the request
 	r = r.WithContext(context.WithValue(r.Context(), epKey, "POST /auth/logout"))
@@ -619,17 +557,15 @@ func (server *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleRefreshToken handles the refresh token mechanism by create new access token using the provided refresh token.
+// endpoint: POST /auth/token/refresh
+// Success: 200
+// Fail: 400, 500
 func (server *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request) {
-	/*
-	 * POST auth/token/refresh
-	 * Success: 200 OK
-	 * Error: 400 Bad Request, 500 Internal Server Error
-	 */
-
 	// Extract account ID from claims
 	claims := r.Context().Value(clKey)
 	var uuid uuid.UUID
-	uuid.Scan(claims.(*service.CustomClaims).ID)
+	uuid.Scan(claims.(*security.CustomClaims).ID)
 
 	// Check if account status is active or not before continuing with the request
 	r = r.WithContext(context.WithValue(r.Context(), epKey, "POST /auth/token/refresh"))
@@ -650,8 +586,8 @@ func (server *Server) HandleRefreshToken(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Create new access token using the refresh token
-		newAccessToken, err := server.jwtService.CreateToken(claims.(*service.CustomClaims).ID, "access-token",
-			claims.(*service.CustomClaims).Version+1, server.jwtService.TokenExpirationTime)
+		newAccessToken, err := server.jwtService.CreateToken(claims.(*security.CustomClaims).ID, "access-token",
+			claims.(*security.CustomClaims).Version+1, server.jwtService.TokenExpirationTime)
 		if err != nil {
 			server.logger.Error("POST /auth/token/refresh: failed to create new access token", "error", err)
 			server.WriteError(w, http.StatusInternalServerError, "Internal server error")

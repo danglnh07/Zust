@@ -7,8 +7,9 @@ import (
 	"log/slog"
 	"net/http"
 	db "zust/db/sqlc"
-	"zust/service"
-	"zust/util"
+	"zust/service/file"
+	"zust/service/mail"
+	"zust/service/security"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
@@ -25,29 +26,29 @@ var (
 
 // Server struct
 type Server struct {
-	query       *db.Queries
-	jwtService  *service.JWTService
-	mailService *service.EmailService
-	storage     *service.LocalStorage
-	mux         *http.ServeMux
-	logger      *slog.Logger
-	validate    *validator.Validate
-	config      *util.Config
+	query        *db.Queries
+	jwtService   *security.JWTService
+	mailService  *mail.EmailService
+	mediaService *file.MediaService
+	storage      *file.LocalStorage
+	mux          *http.ServeMux
+	logger       *slog.Logger
+	validate     *validator.Validate
+	config       *security.Config
 }
 
 // NewServer creates a new HTTP server and setup routing
-func NewServer(conn *sql.DB, logger *slog.Logger) *Server {
-	config := util.GetConfig()
-
+func NewServer(conn *sql.DB, config *security.Config, logger *slog.Logger) *Server {
 	server := &Server{
-		query:       db.New(conn),
-		jwtService:  service.NewJWTService(),
-		mailService: service.NewEmailService(),
-		storage:     service.NewLocalStorage(),
-		mux:         http.NewServeMux(),
-		logger:      logger,
-		validate:    validator.New(validator.WithRequiredStructEnabled()),
-		config:      &config,
+		query:        db.New(conn),
+		jwtService:   security.NewJWTService(config),
+		mailService:  mail.NewEmailService(config),
+		mediaService: file.NewMediaService(config),
+		storage:      file.NewLocalStorage(config),
+		mux:          http.NewServeMux(),
+		logger:       logger,
+		validate:     validator.New(validator.WithRequiredStructEnabled()),
+		config:       config,
 	}
 
 	server.RegisterHandler()
@@ -58,7 +59,7 @@ func NewServer(conn *sql.DB, logger *slog.Logger) *Server {
 // RegisterHandler register all route
 func (server *Server) RegisterHandler() {
 	// Media serving
-	server.mux.HandleFunc("GET /media/{id}", server.HandleFile)
+	server.mux.HandleFunc("GET /media/{id}", server.HandleMedia)
 
 	// Auth routes
 	server.mux.HandleFunc("POST /auth/login", server.HandleLogin)
@@ -78,16 +79,15 @@ func (server *Server) RegisterHandler() {
 	server.mux.Handle("DELETE /subscribe", server.AuthMiddleware(http.HandlerFunc(server.HandleUnsubscribe)))
 
 	// Video routes
-	server.mux.Handle("POST /videos/", server.AuthMiddleware(http.HandlerFunc(server.HandleCreateVideo)))
+	server.mux.Handle("POST /videos", server.AuthMiddleware(http.HandlerFunc(server.HandleCreateVideo)))
 	server.mux.HandleFunc("GET /videos/{id}", server.HandleGetVideo)
 
 }
 
 // Start runs the HTTP server on a specific address
 func (server *Server) Start() error {
-	config := util.GetConfig()
-	server.logger.Info(fmt.Sprintf("Server start at %s:%s", config.Domain, config.Port))
-	return http.ListenAndServe(fmt.Sprintf(":%s", config.Port), server.mux)
+	server.logger.Info(fmt.Sprintf("Server start at %s:%s", server.config.Domain, server.config.Port))
+	return http.ListenAndServe(fmt.Sprintf(":%s", server.config.Port), server.mux)
 }
 
 // WriteError writes an error response in JSON format
@@ -134,7 +134,7 @@ func (server *Server) checkAccountStatus(w http.ResponseWriter, r *http.Request,
 func (server *Server) checkIDMatch(w http.ResponseWriter, r *http.Request, accountID string) bool {
 	// Get the account ID from the claims and check if they match with the account ID given in request data
 	claims := r.Context().Value(clKey)
-	if claims.(*service.CustomClaims).ID != accountID {
+	if claims.(*security.CustomClaims).ID != accountID {
 		server.WriteError(w, http.StatusBadRequest, "Account ID not match with the ID from access token")
 		return false
 	}

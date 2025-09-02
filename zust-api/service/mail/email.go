@@ -1,14 +1,15 @@
-package service
+package mail
 
 import (
 	"fmt"
-	"html/template"
 	"net/smtp"
 	"strings"
+	"text/template"
 
-	"zust/util"
+	"zust/service/security"
 )
 
+// Email service struct, which holds configurations related to email sending
 type EmailService struct {
 	Host  string
 	Port  string
@@ -16,10 +17,8 @@ type EmailService struct {
 	Auth  smtp.Auth
 }
 
-func NewEmailService() *EmailService {
-	// Load email configuration from environment variables
-	config := util.GetConfig()
-
+// Constructing method for email service struct
+func NewEmailService(config *security.Config) *EmailService {
 	// Try simple authentication
 	smtpAuth := smtp.PlainAuth("", config.Email, config.AppPassword, config.SMTPHost)
 
@@ -31,20 +30,25 @@ func NewEmailService() *EmailService {
 	}
 }
 
-type VerificationEmailData struct {
+// Verification (account activation) email payload
+type VerificationEmailPayload struct {
 	Username string
 	Link     string
 }
 
-func (service *EmailService) PrepareEmail(data VerificationEmailData) (string, error) {
+// Method to prepare email payload.
+// 'templ' is the path to where the HTML email located
+// Note that this method won't do any type checking whether templ and payload actually match before processing
+func (service *EmailService) PrepareEmail(templ string, payload any) (string, error) {
 	// Create buffer
-	tmpl, err := template.ParseFiles("template/verification.html")
+	tmpl, err := template.ParseFiles(templ)
 	if err != nil {
 		return "", err
 	}
 
+	// Execute template into buffer
 	var sb strings.Builder
-	err = tmpl.Execute(&sb, data)
+	err = tmpl.Execute(&sb, payload)
 	if err != nil {
 		return "", err
 	}
@@ -52,6 +56,7 @@ func (service *EmailService) PrepareEmail(data VerificationEmailData) (string, e
 	return sb.String(), nil
 }
 
+// Method to send email
 func (service *EmailService) SendEmail(to, subject, body string) error {
 	// Set email headers with MIME version and content type
 	headers := make(map[string]string)

@@ -11,10 +11,15 @@ import (
 	"strings"
 	"time"
 	db "zust/db/sqlc"
+	"zust/service/file"
 
 	"github.com/google/uuid"
 )
 
+// HandleCreateVideo handle the video uploading.
+// endpoint: POST /videos
+// Success: 201
+// Fail: 400, 403
 func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) {
 	// Check if requester account status is active or not
 	var accountID uuid.UUID
@@ -57,7 +62,7 @@ func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Try downloading uploaded video
+	// Try downloading the uploaded video
 	resource, _, err := r.FormFile("resource")
 	if err != nil || resource == nil {
 		server.WriteError(w, http.StatusBadRequest, "Failed to read uploaded video")
@@ -83,7 +88,7 @@ func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get video duration and update to database
-	duration, err := server.storage.GetVideoDuration(filename)
+	duration, err := server.mediaService.GetVideoDuration(filename)
 	if err != nil {
 		server.logger.Error("POST /videos: failed to get video duration", "error", err)
 		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
@@ -122,15 +127,16 @@ func (server *Server) HandleCreateVideo(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Return the result back to client
-	server.WriteJSON(w, http.StatusCreated, "Video uploaded successfully! The video may not available because of the speed of processing")
+	server.WriteJSON(w, http.StatusCreated, "Video uploaded successfully! The video may not available right away")
 
 	// Transcode video (background services)
 }
 
+// request body for GetVideo
 type getVideoResponse struct {
 	ID                string    `json:"id"`
 	Title             string    `json:"title"`
-	Media             string    `json:"media"`
+	Resource          string    `json:"resource"`
 	Thumbnail         string    `json:"thumbnail"`
 	Duration          int       `json:"duration"`
 	Description       string    `json:"description"`
@@ -143,6 +149,10 @@ type getVideoResponse struct {
 	TotalView         int       `json:"total_view"`
 }
 
+// HandleGetVideo handles the GET request for video.
+// endpoint: GET /videos/{id}?resolution=...
+// Success: 200
+// Fail: 400, 403, 404, 500
 func (server *Server) HandleGetVideo(w http.ResponseWriter, r *http.Request) {
 	// Get video ID
 	id := r.PathValue("id")
@@ -193,61 +203,27 @@ func (server *Server) HandleGetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	videoMedia, err := server.storage.GenerateMediaLink(
-		video.AccountID.String(),
-		"resource",
-		resourceName,
-		server.config.Domain,
-		server.config.Port,
+	// Send data back to client
+	resource := server.mediaService.GenerateMediaLink(video.AccountID.String(), resourceName, file.Video)
+	thumbnail := server.mediaService.GenerateMediaLink(
+		video.AccountID.String(), fmt.Sprintf("%s.png", video.VideoID.String()), file.Thumbnail,
 	)
-	if err != nil {
-		server.logger.Error("GET /videos{id}: failed to generate media link for resource", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	thumbnailMedia, err := server.storage.GenerateMediaLink(
-		video.AccountID.String(),
-		"thumbnail",
-		fmt.Sprintf("%s.png", video.VideoID.String()),
-		server.config.Domain,
-		server.config.Port,
-	)
-	if err != nil {
-		server.logger.Error("GET /videos{id}: failed to generate media link for thumbnail", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
-	avatarMedia, err := server.storage.GenerateMediaLink(
-		video.AccountID.String(),
-		"avatar",
-		"avatar.png",
-		server.config.Domain,
-		server.config.Port,
-	)
-	if err != nil {
-		server.logger.Error("GET /videos{id}: failed to generate media link for avatar", "error", err)
-		server.WriteError(w, http.StatusInternalServerError, "Internal server error")
-		return
-	}
-
+	avatar := server.mediaService.GenerateMediaLink(video.AccountID.String(), "avatar.png", file.Avatar)
 	data := getVideoResponse{
 		ID:                video.VideoID.String(),
 		Title:             video.Title,
-		Media:             videoMedia,
-		Thumbnail:         thumbnailMedia,
+		Resource:          resource,
+		Thumbnail:         thumbnail,
 		Duration:          int(video.Duration),
 		Description:       video.Description.String,
 		CreatedAt:         video.CreatedAt,
 		PublisherID:       video.AccountID.String(),
 		PublisherUsername: video.Username,
-		PublisherAvatar:   avatarMedia,
+		PublisherAvatar:   avatar,
 		TotalSubscriber:   int(video.TotalSubscriber),
 		TotakLike:         int(video.TotalLike),
 		TotalView:         int(video.TotalView),
 	}
 
-	// Send data back to client
 	server.WriteJSON(w, http.StatusOK, data)
 }

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"zust/api"
-	"zust/util"
+	"zust/service/security"
 
 	_ "github.com/lib/pq"
 )
@@ -15,12 +15,12 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Load config from .env
-	err := util.LoadConfig("./.env")
+	err := security.LoadConfig("./.env")
 	if err != nil {
 		logger.Error("Failed to load configurations from .env", "error", err)
 		return
 	}
-	config := util.GetConfig()
+	config := security.GetConfig()
 
 	// Connect to database
 	conn, err := sql.Open(config.DbDriver, config.DbSource)
@@ -29,8 +29,8 @@ func main() {
 		return
 	}
 
-	// Create a server
-	svr := api.NewServer(conn, logger)
+	// Create and start server
+	svr := api.NewServer(conn, &config, logger)
 	if err := svr.Start(); err != nil {
 		logger.Error("Error: server unexpectedly shutdown", "error", err)
 	}

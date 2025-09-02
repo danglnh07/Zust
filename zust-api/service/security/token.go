@@ -1,4 +1,4 @@
-package service
+package security
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 	db "zust/db/sqlc"
-	"zust/util"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -31,10 +30,7 @@ type CustomClaims struct {
 }
 
 // Function to create a new JWTService
-func NewJWTService() *JWTService {
-	// Load configuration from .env
-	config := util.GetConfig()
-
+func NewJWTService(config *Config) *JWTService {
 	return &JWTService{
 		SecretKey:                  []byte(config.SecretKey),
 		TokenExpirationTime:        config.TokenExpirationTime * time.Minute,
